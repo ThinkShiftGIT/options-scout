@@ -1,78 +1,87 @@
 #!/usr/bin/env python3
 """
-scan_send.py  ▸  minimal WhatsApp‑Cloud‑API sender
-──────────────────────────────────────────────────
-▪ Reads your secrets from environment variables
-▪ Assembles one templated alert
-▪ POSTs it to the WhatsApp Business Cloud API
+scan_send.py – WhatsApp Cloud API Alert Sender
 
-REQUIRED SECRETS  (add in GitHub → Settings → Secrets & variables → Actions)
+This script reads configuration from environment variables and sends
+a templated WhatsApp message via the WhatsApp Business Cloud API.
 
-  PHONE_ID      – numeric phone‑ID that owns the template
-  WABA_TOKEN    – permanent system‑user token (Bearer)
-  USER_NUMBER   – customer number with country code (18175551234)
-  TEMPLATE_NAME – e.g. hourly_trade_alert_us
-  LANG_CODE     – e.g. en_US
-  NAMESPACE     – 32‑char namespace shown in *Namespace* modal
+Required environment variables (set as GitHub Actions secrets or local env):
+  PHONE_ID      – WhatsApp phone-number ID (from API Setup)
+  WABA_TOKEN    – Permanent system-user access token (Never expires)
+  USER_NUMBER   – Recipient phone number in E.164 format (digits only, e.g., 18178419493)
+  TEMPLATE_NS   – Template namespace (32-char string from "Namespace" modal)
+  TEMPLATE_NM   – Template name (e.g., hourly_trade_alert_us)
+  LANG_CODE     – Template language code (e.g., en_US)
 
-Usage:   python scan_send.py
+Usage:
+  python scan_send.py
 """
 
-import os, json, datetime, textwrap, requests, sys
+import os
+import sys
+import json
+import datetime
+import requests
 
-# ╭──────────────────────────────────────────────╮
-# │ 1.  pull the secrets                         │
-# ╰──────────────────────────────────────────────╯
-PHONE_ID      = os.getenv("PHONE_ID")
-TOKEN         = os.getenv("WABA_TOKEN")
-TO            = os.getenv("USER_NUMBER")
-TEMPLATE_NAME = os.getenv("TEMPLATE_NAME")
-LANG_CODE     = os.getenv("LANG_CODE", "en_US")
-NAMESPACE     = os.getenv("NAMESPACE")           # optional but recommended
+# 1. Load configuration
+PHONE_ID    = os.getenv("PHONE_ID")
+TOKEN       = os.getenv("WABA_TOKEN")
+TO_NUMBER   = os.getenv("USER_NUMBER")
+NAMESPACE   = os.getenv("TEMPLATE_NS")
+TEMPLATE    = os.getenv("TEMPLATE_NM")
+LANG_CODE   = os.getenv("LANG_CODE", "en_US")
 
-# rudimentary guard‑rails
-for var, val in [("PHONE_ID",PHONE_ID),("TOKEN",TOKEN),
-                 ("TO",TO),("TEMPLATE_NAME",TEMPLATE_NAME)]:
-    if not val:
-        sys.exit(f"❌  env var {var} missing")
+# 2. Validate required vars
+missing = [name for name,val in {
+    "PHONE_ID": PHONE_ID,
+    "WABA_TOKEN": TOKEN,
+    "USER_NUMBER": TO_NUMBER,
+    "TEMPLATE_NS": NAMESPACE,
+    "TEMPLATE_NM": TEMPLATE
+}.items() if not val]
+if missing:
+    sys.exit(f"❌ Missing environment variable(s): {', '.join(missing)}")
 
-# ╭──────────────────────────────────────────────╮
-# │ 2.  craft example alert content              │
-# ╰──────────────────────────────────────────────╯
-headline = "📊 Market News: Jobs report beats estimates"
-trade    = "🟢 Trade: SPY Jun 28 525/530 bull‑call‑spread"
-footer   = f"⏱ Note: Risk limited to $200 • {datetime.datetime.utcnow():%H:%M} UTC"
+# 3. Build fully-qualified template identifier
+template_fqn = f"{NAMESPACE}:{TEMPLATE}"
 
-# ╭──────────────────────────────────────────────╮
-# │ 3.  build WhatsApp Cloud API payload         │
-# ╰──────────────────────────────────────────────╯
-template_fqn = f"{NAMESPACE}:{TEMPLATE_NAME}" if NAMESPACE else TEMPLATE_NAME
+# 4. Example alert data (replace with real scanner output)
+headline = "📰 Market News: Apple beats Q2 earnings"
+trade    = "💹 Trade: AAPL Jul 19 $175/$180 bull-call-spread"
+footer   = f"⏰ Note: Risk limited to $95 • {datetime.datetime.utcnow():%H:%M UTC}"
 
-body = {
+# 5. Construct WhatsApp Cloud API payload
+payload = {
     "messaging_product": "whatsapp",
-    "to": TO,
+    "to": TO_NUMBER,
     "type": "template",
     "template": {
         "name": template_fqn,
-        "language": { "code": LANG_CODE },
+        "language": {"code": LANG_CODE},
         "components": [{
             "type": "body",
             "parameters": [
-                { "type": "text", "text": headline },
-                { "type": "text", "text": trade },
-                { "type": "text", "text": footer }
+                {"type": "text", "text": headline},
+                {"type": "text", "text": trade},
+                {"type": "text", "text": footer}
             ]
         }]
     }
 }
 
-# ╭──────────────────────────────────────────────╮
-# │ 4.  POST                                     │
-# ╰──────────────────────────────────────────────╯
 url     = f"https://graph.facebook.com/v19.0/{PHONE_ID}/messages"
-headers = { "Authorization": f"Bearer {TOKEN}",
-            "Content-Type": "application/json" }
+headers = {
+    "Authorization": f"Bearer {TOKEN}",
+    "Content-Type": "application/json"
+}
 
-resp = requests.post(url, headers=headers, data=json.dumps(body))
-print("Status:", resp.status_code, resp.text)
-resp.raise_for_status()     # will error‑out the GitHub Action if not 2xx
+# 6. Send the message
+response = requests.post(url, headers=headers, data=json.dumps(payload))
+print(f"Status: {response.status_code}")
+print(response.text)
+
+if response.ok:
+    print("✅ Message sent successfully.")
+else:
+    print("❌ Failed to send message.")
+    sys.exit(1)
