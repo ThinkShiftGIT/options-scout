@@ -1,55 +1,61 @@
-# scan_send.py  – WhatsApp Cloud API “hourly_trade_alert” demo
-# -----------------------------------------------------------
-# Requires three GitHub‑Actions secrets:
-#   PHONE_ID    – WhatsApp test phone‑number ID (looks like 123456789012345)
-#   WABA_TOKEN  – System‑user access token (Never‑expire)
-#   USER_NUMBER – Recipient number in E.164 format, e.g. 18178419493
-#
-# Run locally:  export PHONE_ID=… WABA_TOKEN=… USER_NUMBER=… && python scan_send.py
+#!/usr/bin/env python3
+"""
+scan_send.py – very small proof‑of‑concept
 
-import os, requests, json, datetime
-from textwrap import dedent
+• Looks up three required secrets from environment:
+     PHONE_ID     – WhatsApp phone‑number ID that owns the template
+     WABA_TOKEN   – Permanent system‑user token (Bearer)
+     USER_NUMBER  – Destination phone number in E.164, e.g. 18178419493
+• Uses two OPTIONAL env‑vars so you can change templates at will
+     TEMPLATE_NS  – Message‑template namespace
+     TEMPLATE_NM  – Template short name ( default = hourly_trade_alert )
+"""
 
-PHONE_ID = os.environ["PHONE_ID"]
-TOKEN     = os.environ["WABA_TOKEN"]
-TO        = os.environ["USER_NUMBER"]
+import os, json, datetime, requests, textwrap, sys
 
-# ── ► example content you would generate with your scanner ◄ ──
-headline = "📈 Market News: Apple beats Q2 earnings"
-trade    = "📊 Trade: AAPL – Jun 21 $175/$180 bull‑call‑spread"
-footer   = f"⏰ Note: Risk limited to $95, 72 % POP – {datetime.datetime.utcnow():%H:%M UTC}"
+# ──▶ required secrets
+try:
+    PHONE_ID   = os.environ["PHONE_ID"]
+    TOKEN      = os.environ["WABA_TOKEN"]
+    TO         = os.environ["USER_NUMBER"]
+except KeyError as e:
+    sys.exit(f"❌ Missing environment variable: {e.args[0]}")
 
+# ──▶ template info (namespace is required for Cloud API calls)
+TEMPLATE_NS = os.getenv("TEMPLATE_NS", "")          # required on Cloud API
+TEMPLATE_NM = os.getenv("TEMPLATE_NM", "hourly_trade_alert")
+TEMPLATE_ID = f"{TEMPLATE_NS}:{TEMPLATE_NM}" if TEMPLATE_NS else TEMPLATE_NM
+
+# ──▶ dummy payload data (replace with real scan output later)
+headline = "📰 Market News: Apple beats Q2 earnings"
+trade    = "💹 Trade: AAPL JUL 19 $175 / $180 bull‑call‑spread"
+note     = "⏰ Note: Risk limited to $95, 72 % POP — manage accordingly."
+
+# ──▶ build API body
 body = {
     "messaging_product": "whatsapp",
     "to": TO,
     "type": "template",
     "template": {
-        "name": "hourly_trade_alert",          # ⭆ EXACT name from Manager
-        "language": { "code": "en" },          # use 2‑letter code
+        "name": TEMPLATE_ID,
+        "language": { "code": "en_US" },
         "components": [{
             "type": "body",
             "parameters": [
-                { "type": "text", "text": headline },  # {{1}}
-                { "type": "text", "text": trade },     # {{2}}
-                { "type": "text", "text": footer }     # {{3}}
+                { "type": "text", "text": headline },
+                { "type": "text", "text": trade    },
+                { "type": "text", "text": note     }
             ]
         }]
     }
 }
 
-url = f"https://graph.facebook.com/v19.0/{PHONE_ID}/messages"
-headers = {
-    "Authorization": f"Bearer {TOKEN}",
-    "Content-Type":  "application/json"
-}
+url  = f"https://graph.facebook.com/v19.0/{PHONE_ID}/messages"
+auth = {"Authorization": f"Bearer {TOKEN}"}
+hdrs = {**auth, "Content-Type": "application/json"}
 
-print("Sending to WhatsApp…")
-resp = requests.post(url, headers=headers, data=json.dumps(body))
-
-print("HTTP status:", resp.status_code)
-print(resp.text if resp.text.strip() else "<empty response>")
-
-if resp.ok:
-    print("✅  Message accepted by API.")
-else:
-    print("❌  Error – review status code & message above.")
+# ──▶ send
+resp = requests.post(url, headers=hdrs, data=json.dumps(body))
+print("Status:", resp.status_code, resp.text[:400])
+resp.raise_for_status()            # will raise if non‑200
+print("✅ sent at", datetime.datetime.utcnow().isoformat(" ", "seconds"), "UTC")
