@@ -1,0 +1,20 @@
+name: hourly-scout
+on:
+  schedule:
+    - cron:  '0 14-20/1 * * 1-5'   # every hour 10 am–4 pm New‑York time, Mon‑Fri
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests
+      - run: python scan_send.py
+        env:
+          PHONE_ID: ${{ secrets.PHONE_ID }}
+          WABA_TOKEN: ${{ secrets.WABA_TOKEN }}
+          USER_NUMBER: ${{ secrets.USER_NUMBER }}
