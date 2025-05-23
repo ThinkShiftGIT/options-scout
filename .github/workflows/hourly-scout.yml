@@ -12,9 +12,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install requests
+      - name: Install dependencies
+        run: pip install -r requirements.txt
       - run: python scan_send.py
+        # IMPORTANT: Ensure you have created the following secrets in your
+        # GitHub repository settings (Settings -> Secrets and variables -> Actions -> New repository secret):
+        # PHONE_ID, WABA_TOKEN, USER_NUMBER, TEMPLATE_NS, TEMPLATE_NM
         env:
           PHONE_ID: ${{ secrets.PHONE_ID }}
           WABA_TOKEN: ${{ secrets.WABA_TOKEN }}
           USER_NUMBER: ${{ secrets.USER_NUMBER }}
+          TEMPLATE_NS: ${{ secrets.TEMPLATE_NS }}
+          TEMPLATE_NM: ${{ secrets.TEMPLATE_NM }}
